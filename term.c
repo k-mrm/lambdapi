@@ -152,6 +152,21 @@ struct term *NatRec (struct term *p, struct term *z, struct term *s, struct term
   return t;
 }
 
+struct term *J(struct term *ty, struct term *a, struct term *p, struct term *r, struct term *b, struct term *peq) {
+  struct term *t;
+  t = malloc(sizeof *t);
+  if (!t)
+    return NULL;
+  t->tt = TJ;
+  t->j.ty = ty;
+  t->j.a = a;
+  t->j.p = p;
+  t->j.r = r;
+  t->j.b = b;
+  t->j.peq = peq;
+  return t;
+}
+
 struct term *subst (struct term *t, char *x, struct term *v) {
   switch (t->tt) {
     case TVAR:
@@ -181,6 +196,9 @@ struct term *subst (struct term *t, char *x, struct term *v) {
       return Succ (subst (t->succ.p, x, v));
     case TNATREC:
       return NatRec (subst (t->natrec.p, x, v), subst (t->natrec.z, x, v), subst (t->natrec.s, x, v), subst (t->natrec.m, x, v));
+    case TJ:
+      return J (subst (t->j.ty, x, v), subst (t->j.a, x, v), subst (t->j.p, x, v),
+                subst (t->j.r, x, v), subst (t->j.b, x, v), subst (t->j.peq, x, v));
     default:
       return t;
   }
@@ -190,6 +208,7 @@ struct term *subst (struct term *t, char *x, struct term *v) {
 struct term *norm (struct term *t) {
   struct term *f, *a;
   struct term *p, *z, *s, *m;
+  struct term *jty, *ja, *jp, *jr, *jb, *jpeq;
   switch (t->tt) {
     case TLAM:
       return Lam(t->l.x, norm(t->l.ty), norm(t->l.b));
@@ -221,6 +240,18 @@ struct term *norm (struct term *t) {
         return norm (App (App (s, m->succ.p), NatRec (p, z, s, m->succ.p)));
       else
         return NatRec (p, z, s, m);
+    case TJ:
+      // J A a P r a (Refl a) = r
+      jty = norm (t->j.ty);
+      ja = norm (t->j.a);
+      jp = norm (t->j.p);
+      jr = norm (t->j.r);
+      jb = norm (t->j.b);
+      jpeq = norm (t->j.peq);
+      if (jpeq->tt == TREFL && equal (ja, jb))
+        return jr;
+      else
+        return J (jty, ja, jp, jr, jb, jpeq);
     default:
       return t;
   }
@@ -253,6 +284,9 @@ bool equal(struct term *t1, struct term *t2) {
     case TNATREC:
       return equal (t1->natrec.p, t2->natrec.p) && equal (t1->natrec.z, t2->natrec.z) &&
              equal (t1->natrec.s, t2->natrec.s) && equal (t1->natrec.m, t2->natrec.m);
+    case TJ:
+      return equal (t1->j.ty, t2->j.ty) && equal (t1->j.a, t2->j.a) && equal (t1->j.p, t2->j.p) &&
+             equal (t1->j.r, t2->j.r) && equal (t1->j.b, t2->j.b) && equal (t1->j.peq, t2->j.peq);
     case TTYPE: case TNAT: case TZERO:
       return true;
   }
@@ -333,6 +367,20 @@ static void _dump(struct term *t) {
       printf (" ");
       _dump (t->natrec.m);
       break;
+    case TJ:
+      printf ("J ");
+      _dump (t->j.ty);
+      printf (" ");
+      _dump (t->j.a);
+      printf (" ");
+      _dump (t->j.p);
+      printf (" ");
+      _dump (t->j.r);
+      printf (" ");
+      _dump (t->j.b);
+      printf (" ");
+      _dump (t->j.peq);
+      break;
     default:
       panic("unreachable");
   }
@@ -353,7 +401,7 @@ static char *fresh () {
 
 struct term *infer(struct ctx *c, struct term *t) {
   struct term *ty, *tb, *tlam, *ta, *tp, *ts;
-  char *k;
+  char *k, *vb;
   switch (t->tt) {
     case TTYPE: case TNAT:
       return Type ();
@@ -412,6 +460,22 @@ struct term *infer(struct ctx *c, struct term *t) {
       if (!equal (infer (c, t->natrec.m), Nat ()))
         panic ("natrec m: mismatch");
       return App (t->natrec.p, t->natrec.m);
+    case TJ:
+      if (!equal (infer (c, t->j.ty), Type ()))
+        panic ("J ty");
+      if (!equal (infer (c, t->j.a), t->j.ty))
+        panic ("J a");
+      vb = fresh ();
+      tp = Pi (vb, t->j.ty, Pi ("_", Eq (t->j.ty, t->j.a, Var (vb)), Type ()));
+      if (!equal (infer (c, t->j.p), tp))
+        panic ("J p");
+      if (!equal (infer (c, t->j.r), App (App (t->j.p, t->j.a), Refl (t->j.a))))
+        panic ("J r");
+      if (!equal (infer (c, t->j.b), t->j.ty))
+        panic ("J b");
+      if (!equal (infer (c, t->j.peq), Eq (t->j.ty, t->j.a, t->j.b)))
+        panic ("J peq");
+      return App (App (t->j.p, t->j.b), t->j.peq);
   }
   panic ("unreachable");
 }
