@@ -14,6 +14,7 @@ enum tt {
   TNAT,
   TZERO,
   TSUCC,
+  TNATREC,
 };
 
 struct term {
@@ -50,6 +51,10 @@ struct term {
       // Succ (p: Nat): Nat
       struct term *p;
     } succ;
+    struct {
+      // NatRec: (P: Nat -> Type) -> P Zero -> ((k: Nat) -> P k -> P (Succ k)) -> (m: Nat) -> P m
+      struct term *p, *z, *s, *m;
+    } natrec;
   };
 };
 
@@ -69,9 +74,11 @@ struct term *Refl(struct term *a);
 struct term *Nat ();
 struct term *Zero ();
 struct term *Succ (struct term *p);
+struct term *NatRec (struct term *p, struct term *z, struct term *s, struct term *m);
 void dump(struct term *t);
 struct term *infer(struct ctx *c, struct term *t);
 struct ctx *addctx(struct ctx *c, char *name, struct term *ty);
+struct term *norm (struct term *t);
 bool equal(struct term *t1, struct term *t2);
 
 #endif

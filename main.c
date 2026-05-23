@@ -12,11 +12,18 @@ void proofcheck(struct ctx *c, struct term *theorem, struct term *proof) {
     printf ("proof failed\n");
 }
 
+struct term *nat (unsigned int n) {
+  if (n == 0)
+    return Zero ();
+  return Succ (nat (n - 1));
+}
+
 int main(void) {
   struct ctx *c = malloc(sizeof *c);
-  struct term *id, *t, *ty, *n3;
+  struct term *id, *t, *ty, *n1, *n2, *n3, *n4, *n5;
   memset(c, 0, sizeof *c);
   struct term *theorem, *proof;
+  struct term *plus, *res;
 
   // id = \A:Type -> (\x:A -> x)
   id = Lam ("A", Type (), Lam ("x", Var ("A"), Var ("x")));
@@ -24,11 +31,6 @@ int main(void) {
   ty = infer(c, id);
   dump(ty);
 
-  addctx (c, "Nat", Type ());   // Nat: Type
-  addctx (c, "3", Var ("Nat")); // 3: Nat
-  // id Nat 3
-  t = App (App (id, Var ("Nat")), Var ("3"));
-  dump(infer(c, t));  // Nat
   // (A:Type) -> (x:A) -> Eq A (id A x) x
   theorem = Pi ("A", Type (),
                 Pi ("x", Var ("A"), Eq (Var ("A"),
@@ -45,6 +47,25 @@ int main(void) {
   dump(proof);
   proofcheck(c, theorem, proof);
 
-  n3 = Succ (Succ (Succ (Zero ())));
-  dump(n3);
+  plus = Lam ("n", Nat (),
+              Lam ("m", Nat (),
+                   NatRec (
+                     Lam ("_", Nat (), Nat ()),
+                     Var ("n"),
+                     Lam ("_", Nat (), Lam ("r", Nat (), Succ (Var ("r")))),
+                     Var ("m")
+                   )
+              )
+         );
+
+  dump (norm (App (App (plus, nat (3)), nat (2))));
+
+  // 2+3 = 1+4
+  theorem = Eq (Nat (), App (App (plus, nat (2)), nat (3)), App (App (plus, nat (1)), nat (4)));
+  proof = Refl (nat (5));
+  printf("theorem: ");
+  dump(theorem);
+  printf("proof: ");
+  dump(proof);
+  proofcheck(c, theorem, proof);
 }
