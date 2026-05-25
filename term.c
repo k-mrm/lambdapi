@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "term.h"
 
+__attribute__ ((noreturn))
 void panic(char *msg) {
   fprintf(stderr, "%s\n", msg);
   exit(1);
@@ -80,6 +81,30 @@ struct term *Pi(char *x, struct term *ta, struct term *tb) {
   return t;
 }
 
+struct term *Sigma (char *x, struct term *ta, struct term *tb) {
+  struct term *t;
+  t = malloc(sizeof *t);
+  if (!t)
+    return NULL;
+  t->tt = TSIGMA;
+  t->s.x = x;
+  t->s.ta = ta;
+  t->s.tb = tb;
+  return t;
+}
+
+struct term *Pair (struct term *a, struct term *b, struct term *ty) {
+  struct term *t;
+  t = malloc(sizeof *t);
+  if (!t)
+    return NULL;
+  t->tt = TPAIR;
+  t->pair.a = a;
+  t->pair.b = b;
+  t->pair.ty = ty;
+  return t;
+}
+
 struct term *Type() {
   struct term *t;
   t = malloc(sizeof *t);
@@ -152,7 +177,7 @@ struct term *NatRec (struct term *p, struct term *z, struct term *s, struct term
   return t;
 }
 
-struct term *J(struct term *ty, struct term *a, struct term *p, struct term *r, struct term *b, struct term *peq) {
+struct term *J (struct term *ty, struct term *a, struct term *p, struct term *r, struct term *b, struct term *peq) {
   struct term *t;
   t = malloc(sizeof *t);
   if (!t)
@@ -186,8 +211,15 @@ struct term *subst (struct term *t, char *x, struct term *v) {
         return Pi(t->pi.x, subst (t->pi.ta, x, v), subst (t->pi.tb, x, v));
       else
         return Pi(t->pi.x, subst (t->pi.ta, x, v), t->pi.tb);
+    case TSIGMA:
+      if (strcmp(t->s.x, x) != 0)
+        return Sigma (t->s.x, subst (t->s.ta, x, v), subst (t->s.tb, x, v));
+      else
+        return Sigma (t->s.x, subst (t->s.ta, x, v), t->s.tb);
+    case TPAIR:
+      return Pair (subst (t->pair.a, x, v), subst (t->pair.b, x, v), subst (t->pair.ty, x, v));
     case TTYPE:
-      return Type();
+      return Type ();
     case TEQ:
       return Eq(subst (t->eq.ty, x, v), subst (t->eq.l, x, v), subst (t->eq.r, x, v));
     case TREFL:
@@ -221,6 +253,10 @@ struct term *norm (struct term *t) {
         return App (f, a);
     case TPI:
       return Pi (t->pi.x, norm (t->pi.ta), norm (t->pi.tb));
+    case TSIGMA:
+      return Sigma (t->s.x, norm (t->s.ta), norm (t->s.tb));
+    case TPAIR:
+      return Pair (norm (t->pair.a), norm (t->pair.b), norm (t->pair.ty));
     case TEQ:
       return Eq (norm (t->eq.ty), norm (t->eq.l), norm (t->eq.r));
     case TREFL:
@@ -275,6 +311,10 @@ bool equal(struct term *t1, struct term *t2) {
       return equal(t1->a.lam, t2->a.lam) && equal(t1->a.arg, t2->a.arg);
     case TPI:
       return equal(t1->pi.ta, t2->pi.ta) && equal(t1->pi.tb, subst (t2->pi.tb, t2->pi.x, Var(t1->pi.x)));
+    case TSIGMA:
+      return equal (t1->s.ta, t2->s.ta) && equal (t1->s.tb, subst (t2->s.tb, t2->s.x, Var (t1->s.x)));
+    case TPAIR:
+      return equal (t1->pair.a, t2->pair.a) && equal (t1->pair.b, t2->pair.b) && equal (t1->pair.ty, t2->pair.ty);
     case TEQ:
       return equal(t1->eq.ty, t2->eq.ty) && equal(t1->eq.l, t2->eq.l) && equal(t1->eq.r, t2->eq.r);
     case TREFL:
@@ -327,6 +367,19 @@ static void _dump(struct term *t) {
       _dump(t->pi.ta);
       printf(" -> ");
       _dump(t->pi.tb);
+      break;
+    case TSIGMA:
+      printf ("Sigma %s: ", t->s.x);
+      _dump (t->s.ta);
+      printf (". ");
+      _dump (t->s.tb);
+      break;
+    case TPAIR:
+      _dump (t->pair.a);
+      printf (", ");
+      _dump (t->pair.b);
+      printf (" : ");
+      _dump (t->pair.ty);
       break;
     case TEQ:
       printf("Eq:");
@@ -400,7 +453,7 @@ static char *fresh () {
 }
 
 struct term *infer(struct ctx *c, struct term *t) {
-  struct term *ty, *tb, *tlam, *ta, *tp, *ts;
+  struct term *ty, *tb, *tlam, *ta, *tp, *ts, *sty;
   char *k, *vb;
   switch (t->tt) {
     case TTYPE: case TNAT:
@@ -427,10 +480,27 @@ struct term *infer(struct ctx *c, struct term *t) {
       }
     case TPI: /* (x:A) -> B */
       if (!equal(infer(c, t->pi.ta), Type()))
-        panic ("Pi type mismatch");
+        panic ("Pi.a type mismatch");
       if (!equal(infer(addctx(ccopy(c), t->pi.x, t->pi.ta), t->pi.tb), Type()))
-        panic ("Pi type mismatch");
+        panic ("Pi.b type mismatch");
       return Type ();
+    case TSIGMA:
+      if (!equal (infer (c, t->s.ta), Type ()))
+        panic ("Sigma.a type mismatch");
+      if (!equal (infer (addctx (ccopy(c), t->s.x, t->s.ta), t->s.tb), Type ()))
+        panic ("Sigma.b type mismatch");
+      return Type ();
+    case TPAIR:
+      sty = norm (t->pair.ty);
+      if (sty->tt == TSIGMA) {
+        if (!equal (infer (c, t->pair.a), sty->s.ta))
+          panic ("pair.a mismatch");
+        if (!equal (infer (c, t->pair.b), subst (sty->s.tb, sty->s.x, t->pair.a))) 
+          panic ("pair.b mismatch");
+        return sty;
+      } else {
+        panic ("non Sigma");
+      }
     case TEQ:
       if (!equal(infer(c, t->eq.ty), Type()))
         panic ("Eq type mismatch");
@@ -440,7 +510,7 @@ struct term *infer(struct ctx *c, struct term *t) {
         panic ("Eq.r type mismatch");
       return Type ();
     case TREFL:
-      ta = norm (infer(c, t->refl.a));
+      ta = norm (infer (c, t->refl.a));
       return Eq (ta, t->refl.a, t->refl.a);
     case TZERO:
       return Nat ();

@@ -30,6 +30,7 @@ int main(void) {
   struct term *plus, *res;
   struct term *n_plus_0_is_n, *n_is_n_plus_0;
   struct term *proof_n_plus_0_is_n;
+  struct term *exists_0;
 
   // id = \A:Type -> (\x:A -> x)
   id = Lam ("A", Type (), Lam ("x", Var ("A"), Var ("x")));
@@ -193,4 +194,14 @@ int main(void) {
   top = Pi ("P", Type (), Pi ("_", Var ("P"), Var ("P")));
   dump (top);
   proofcheck (c, top, id);
+
+  // exists 0
+  // Sigma(n: Nat). (Eq Nat n 0)
+  exists_0 = Sigma ("n", Nat (), Eq (Nat (), Var ("n"), nat (0)));
+  proof = Pair (nat (0), Refl (nat (0)),
+                Sigma ("n", Nat (), Eq (Nat (), Var ("n"), nat (0)))
+          );
+  printf ("Proof exists n: Nat . (Eq Nat n 0) : \n");
+  dump (proof);
+  proofcheck (c, exists_0, proof);
 }

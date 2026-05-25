@@ -8,6 +8,8 @@ enum tt {
   TLAM,
   TAPP,
   TPI,
+  TSIGMA,
+  TPAIR,
   TTYPE,
   TEQ,
   TREFL,
@@ -36,9 +38,18 @@ struct term {
     struct {
       // (x:A) -> B
       char *x;
-      struct term *ta;
-      struct term *tb;
+      struct term *ta, *tb;
     } pi;
+    struct {
+      // Sigma(x : A). B
+      char *x;
+      struct term *ta, *tb;
+    } s;
+    struct {
+      // (a, b): Sigma(a: A). B;
+      struct term *a, *b;
+      struct term *ty;
+    } pair;
     struct {
       // Eq:A l r
       struct term *ty;
@@ -73,6 +84,8 @@ struct term *Var(char *n);
 struct term *Lam(char *x, struct term *ty, struct term *b);
 struct term *App(struct term *lam, struct term *arg);
 struct term *Pi(char *x, struct term *ta, struct term *tb);
+struct term *Sigma (char *x, struct term *ta, struct term *tb);
+struct term *Pair (struct term *a, struct term *b, struct term *ty);
 struct term *Type();
 struct term *Eq(struct term *ty, struct term *l, struct term *r);
 struct term *Refl(struct term *a);
