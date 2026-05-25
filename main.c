@@ -22,11 +22,14 @@ int main(void) {
   struct ctx *c = malloc(sizeof *c);
   struct term *id, *t, *ty, *n1, *n2, *n3, *n4, *n5;
   memset(c, 0, sizeof *c);
-  struct term *theorem, *proof;
+  struct term *theorem, *proof, *pr_ng;
   struct term *lemma_congS, *congS;
   struct term *lemma_sym, *sym;
+  struct term *bot, *top;
+  struct term *neg;
   struct term *plus, *res;
-  struct term *n_plus_0_is_n;
+  struct term *n_plus_0_is_n, *n_is_n_plus_0;
+  struct term *proof_n_plus_0_is_n;
 
   // id = \A:Type -> (\x:A -> x)
   id = Lam ("A", Type (), Lam ("x", Var ("A"), Var ("x")));
@@ -133,7 +136,7 @@ int main(void) {
   // n + 0 = n
   // (n: Nat) -> (Eq Nat (plus n 0) n)
   n_plus_0_is_n = Pi ("n", Nat (), Eq (Nat (), App (App (plus, Var ("n")), nat (0)), Var ("n")));
-  proof = Lam ("n", Nat (),
+  proof_n_plus_0_is_n = Lam ("n", Nat (),
                NatRec (
                  Lam ("x", Nat (), Eq (Nat (), App (App (plus, Var ("x")), nat (0)), Var ("x"))),
                  // zero: 0 + 0 = 0
@@ -149,7 +152,45 @@ int main(void) {
                  Var ("n")
                )
           );
-  dump (n_plus_0_is_n);
-  dump (norm (infer (c, proof)));
-  proofcheck (c, n_plus_0_is_n, proof);
+  printf ("Proof (n: Nat) -> (Eq Nat (plus n 0) n): \n");
+  // dump (norm (infer (c, proof_n_plus_0_is_n)));
+  dump (proof_n_plus_0_is_n);
+  proofcheck (c, n_plus_0_is_n, proof_n_plus_0_is_n);
+
+  // n = n + 0
+  // (n: Nat) -> (Eq Nat n (plus n 0))
+  n_is_n_plus_0 = Pi ("n", Nat (), Eq (Nat (), Var ("n"), App (App (plus, Var ("n")), nat (0))));
+  proof = Lam ("n", Nat (),
+               App (App (App (App (sym, Nat ()),
+                              App (App (plus, Var ("n")), nat (0))
+                         ),
+                         Var ("n") 
+                    ),
+                    App (proof_n_plus_0_is_n, Var ("n"))
+               )
+          );
+  pr_ng = Lam ("n", Nat (),
+               App (App (App (App (sym, Nat ()),
+                              Var ("n") 
+                         ),
+                         App (App (plus, Var ("n")), nat (0))
+                    ),
+                    App (proof_n_plus_0_is_n, Var ("n"))
+               )
+          );
+  printf ("Proof (n: Nat) -> (Eq Nat n (plus n 0)): \n");
+  dump (proof);
+  proofcheck (c, n_is_n_plus_0, proof);
+
+  // bot = \P: Type -> P
+  bot = Pi ("P", Type (), Var ("P"));
+  dump (bot);
+
+  // neg: (P: Type) -> P -> bot
+  neg = Pi ("p", Type (), Pi ("_", Var ("p"), bot));
+
+  // top: (P: Type) -> P -> P
+  top = Pi ("P", Type (), Pi ("_", Var ("P"), Var ("P")));
+  dump (top);
+  proofcheck (c, top, id);
 }
